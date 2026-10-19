@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# 题海无涯
 
-## Getting Started
+基于 Next.js 14 App Router、React 18、TypeScript、Ant Design 5 的题库前端，连接同目录的 EndlessQuestion 后端。
 
-First, run the development server:
+## 本地启动
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+访问 http://localhost:3000 。默认将 `/api/*` 代理到 `http://127.0.0.1:8101/api/*`。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+后端地址需要调整时，将 `.env.example` 复制为 `.env.local`，修改 `BACKEND_URL`（不包含 `/api`），然后重启前端。后端的 MySQL、Redis 及其他已启用服务需要自行就绪。全文搜索依赖 Elasticsearch。
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+## 页面
 
-## Learn More
+- `/`：首页、近期题库和题目、本浏览器最近阅读入口。
+- `/banks`、`/banks/[bankId]`：题库浏览与题库内搜索。
+- `/questions`、`/questions/[questionId]`：题目检索与 Markdown 阅读。
+- `/banks/[bankId]/questions/[questionId]`：题库目录、答案折叠、跨页切题。
+- `/user/login`、`/user/register`：登录注册及站内返回地址。
+- `/user/profile`：资料、头像和年度签到。
+- `/admin/questions`、`/admin/banks`、`/admin/users`：管理员内容与用户维护。
+- `/admin/banks/[bankId]/questions`：题目批量关联和移除。
 
-To learn more about Next.js, take a look at the following resources:
+## 代码组织
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `src/lib/api.ts`：Axios、响应解包、错误映射、详情访问告警冷却；业务 ID 使用字符串。
+- `src/components/providers.tsx`：Ant Design 中文主题、查询缓存和登录态。
+- `src/components/learning.tsx`：首页、列表、搜索、Markdown 和阅读组件。
+- `src/components/account.tsx`：登录、路由权限、资料、上传和签到。
+- `src/components/admin.tsx`：管理表格、编辑抽屉与题库关联。
+- `src/app`：页面路由、站点元信息和响应式样式。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+浏览器通过同源 Cookie 使用后端 Sa-Token 登录态（当前名为 `EndlessQuestion`）。权限以服务端返回为准，不保存密码或自行复制 Token。
 
-## Deploy on Vercel
+题目详情不自动重试、不在窗口聚焦时刷新，也不预取相邻题目。收到业务码 110 后，在当前标签页暂停新的详情网络请求 60 秒；这不能代替后端频率限制。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+头像上传使用 `file` 与 `biz=user_avatar`，限制 1 MB。题库封面仅填写图片 URL。签到返回的整数按从 1 开始的年内天数换算；签到不等于答题完成记录。最近阅读仅存储在当前浏览器。
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+## 检查与生产运行
+
+```bash
+npm test
+npm run lint
+npm run build
+npm start
+```
+
+`npm test` 使用 Node 内置测试运行器验证 Axios 请求契约、字符串 ID、登录失效、游客初始化、告警冷却和文件上传；测试使用适配器模拟响应，不访问或写入真实后端。
+
+生产环境需配置实际后端地址并提供 HTTPS。未实现没有现成接口支撑的判分、错题本、题目收藏和跨设备学习进度。帖子模块按计划暂缓，需先确认数据表与运行环境。
