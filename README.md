@@ -15,9 +15,9 @@ npm run dev
 
 ## 页面
 
-- `/`：首页、近期题库和题目、本浏览器最近阅读入口。
+- `/`：首页、近期题库和题目、本浏览器最近刷题入口。
 - `/banks`、`/banks/[bankId]`：题库浏览与题库内搜索。
-- `/questions`、`/questions/[questionId]`：题目检索与 Markdown 阅读。
+- `/questions`、`/questions/[questionId]`：题目检索与 Markdown 刷题练习。
 - `/banks/[bankId]/questions/[questionId]`：题库目录、答案折叠、跨页切题。
 - `/user/login`、`/user/register`：登录注册及站内返回地址。
 - `/user/profile`：资料、头像和年度签到。
@@ -28,7 +28,7 @@ npm run dev
 
 - `src/lib/api.ts`：Axios、响应解包、错误映射、详情访问告警冷却；业务 ID 使用字符串。
 - `src/components/providers.tsx`：Ant Design 中文主题、查询缓存和登录态。
-- `src/components/learning.tsx`：首页、列表、搜索、Markdown 和阅读组件。
+- `src/components/learning.tsx`：首页、列表、搜索、Markdown 和刷题组件。
 - `src/components/account.tsx`：登录、路由权限、资料、上传和签到。
 - `src/components/admin.tsx`：管理表格、编辑抽屉与题库关联。
 - `src/app`：页面路由、站点元信息和响应式样式。
@@ -37,7 +37,7 @@ npm run dev
 
 题目详情不自动重试、不在窗口聚焦时刷新，也不预取相邻题目。收到业务码 110 后，在当前标签页暂停新的详情网络请求 60 秒；这不能代替后端频率限制。
 
-头像上传使用 `file` 与 `biz=user_avatar`，限制 1 MB。题库封面仅填写图片 URL。签到返回的整数按从 1 开始的年内天数换算；签到不等于答题完成记录。最近阅读仅存储在当前浏览器。
+头像上传使用 `file` 与 `biz=user_avatar`，限制 1 MB。题库封面仅填写图片 URL。签到返回的整数按从 1 开始的年内天数换算；签到不等于答题完成记录。最近刷题仅存储在当前浏览器。
 
 ## 检查与生产运行
 

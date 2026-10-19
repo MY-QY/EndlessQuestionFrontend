@@ -1124,3 +1124,7 @@ button:focus-visible {
 .calendar-year-actions .ant-select {
   min-width: 102px;
 }
+.directory-note {
+  margin-bottom: 14px;
+  font-size: 12px;
+}

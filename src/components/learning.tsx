@@ -24,6 +24,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, ApiError, Bank, errorText, Page, Question } from "@/lib/api";
 import { useAuth } from "./providers";
+import { practiceHref } from "@/lib/practice";
 
 export function Failure({
   error,
@@ -110,11 +111,12 @@ function QuestionRows({
         <Link
           key={q.id}
           className="question-row"
-          href={
-            bankId
-              ? `/banks/${bankId}/questions/${q.id}?page=${Math.floor((offset + i) / 20) + 1}${context}`
-              : `/questions/${q.id}`
-          }
+          href={practiceHref(
+            q.id,
+            bankId,
+            Math.floor((offset + i) / 20) + 1,
+            context,
+          )}
         >
           <span className="question-number">
             {String(offset + i + 1).padStart(2, "0")}
@@ -212,13 +214,14 @@ export function HomePage() {
             </Link>
             {recent && (
               <Link
-                href={
-                  recent.bankId
-                    ? `/banks/${recent.bankId}/questions/${recent.id}?page=${recent.page || 1}${recent.context || ""}`
-                    : `/questions/${recent.id}`
-                }
+                href={practiceHref(
+                  recent.id,
+                  recent.bankId,
+                  recent.page || 1,
+                  recent.context || "",
+                )}
               >
-                <Button size="large">继续阅读</Button>
+                <Button size="large">继续刷题</Button>
               </Link>
             )}
           </div>
@@ -401,7 +404,7 @@ export function Catalog({
             href={`/banks/${bankId}/questions/${query.data.records[0].id}?page=${Math.floor(((current - 1) * 12) / 20) + 1}&q=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}&mode=${fulltext ? "fulltext" : ""}`}
           >
             <Button type="primary">
-              开始阅读 <ArrowRightOutlined />
+              开始刷题 <ArrowRightOutlined />
             </Button>
           </Link>
         )}
@@ -532,7 +535,6 @@ export function QuestionDetail({
         "post",
         signal,
       ),
-    enabled: !!bankId,
   });
   useEffect(() => {
     setShow(false);
@@ -558,6 +560,7 @@ export function QuestionDetail({
   const [moving, setMoving] = useState(false);
   const [moveError, setMoveError] = useState("");
   async function move(delta: number) {
+    if (index < 0 || moving) return;
     setMoving(true);
     setMoveError("");
     try {
@@ -580,10 +583,7 @@ export function QuestionDetail({
         target =
           delta > 0 ? next.records[0] : next.records[next.records.length - 1];
       }
-      if (target)
-        router.push(
-          `/banks/${bankId}/questions/${target.id}?page=${page}${context}`,
-        );
+      if (target) router.push(practiceHref(target.id, bankId, page, context));
     } catch (e) {
       setMoveError(errorText(e));
     } finally {
@@ -593,47 +593,58 @@ export function QuestionDetail({
   return (
     <>
       <div className="breadcrumb">
-        <Link href={bankId ? `/banks/${bankId}` : "/questions"}>
+        <Link
+          href={`${bankId ? `/banks/${bankId}` : "/questions"}?page=1${context}`}
+        >
           {bankId ? "返回题库" : "全部题目"}
         </Link>
-        <span>/</span>题目阅读
+        <span>/</span>刷题练习
       </div>
-      <div className={bankId ? "reading-layout" : "reading-single"}>
-        {bankId && (
-          <aside className="panel directory">
-            <h3>题目目录</h3>
-            {directory.isPending ? (
-              <Skeleton active />
-            ) : directory.error ? (
-              <Failure
-                error={directory.error}
-                retry={() => void directory.refetch()}
-              />
-            ) : items.length ? (
-              items.map((q, i) => (
-                <Link
-                  prefetch={false}
-                  href={`/banks/${bankId}/questions/${q.id}?page=${current}${context}`}
-                  className={q.id === id ? "selected" : ""}
-                  key={q.id}
-                >
-                  <span>{(current - 1) * 20 + i + 1}.</span>
-                  {q.title}
-                </Link>
-              ))
-            ) : (
-              <Empty description="暂无题目" />
-            )}
-            <Pagination
-              simple
-              size="small"
-              current={current}
-              pageSize={20}
-              total={Number(directory.data?.total || 0)}
-              onChange={(page) => router.replace(`?page=${page}${context}`)}
+      <div className="reading-layout">
+        <aside className="panel directory">
+          <h3>题目目录</h3>
+          <p className="muted">
+            {bankId ? "当前题库" : keyword || tag ? "当前筛选结果" : "全部题目"}
+          </p>
+          {!directory.isPending && !directory.error && index < 0 && (
+            <Alert
+              className="directory-note"
+              type="info"
+              showIcon
+              message="当前题目不在本页目录，可切换目录页或选择其他题目"
             />
-          </aside>
-        )}
+          )}
+          {directory.isPending ? (
+            <Skeleton active />
+          ) : directory.error ? (
+            <Failure
+              error={directory.error}
+              retry={() => void directory.refetch()}
+            />
+          ) : items.length ? (
+            items.map((q, i) => (
+              <Link
+                prefetch={false}
+                href={practiceHref(q.id, bankId, current, context)}
+                className={q.id === id ? "selected" : ""}
+                key={q.id}
+              >
+                <span>{(current - 1) * 20 + i + 1}.</span>
+                {q.title}
+              </Link>
+            ))
+          ) : (
+            <Empty description="暂无题目" />
+          )}
+          <Pagination
+            simple
+            size="small"
+            current={current}
+            pageSize={20}
+            total={Number(directory.data?.total || 0)}
+            onChange={(page) => router.replace(`?page=${page}${context}`)}
+          />
+        </aside>
         <article className="panel question-article">
           {query.isPending ? (
             <Skeleton active paragraph={{ rows: 8 }} />
@@ -651,7 +662,7 @@ export function QuestionDetail({
               {query.error instanceof ApiError &&
                 query.error.code === 40100 && (
                   <Link
-                    href={`/user/login?returnUrl=${encodeURIComponent(bankId ? `/banks/${bankId}/questions/${id}` : `/questions/${id}`)}`}
+                    href={`/user/login?returnUrl=${encodeURIComponent(practiceHref(id, bankId, current, context))}`}
                   >
                     前往登录
                   </Link>
@@ -691,32 +702,34 @@ export function QuestionDetail({
                   </div>
                 )}
                 {moveError && <Alert type="error" message={moveError} />}{" "}
-                {bankId && (
-                  <div className="reading-controls">
-                    <Button
-                      loading={moving}
-                      disabled={
-                        moving || index < 0 || (index === 0 && current === 1)
-                      }
-                      onClick={() => move(-1)}
-                    >
-                      上一题
-                    </Button>
-                    <Link href={`/banks/${bankId}`}>返回题库</Link>
-                    <Button
-                      loading={moving}
-                      disabled={
-                        moving ||
-                        index < 0 ||
-                        (index >= items.length - 1 &&
-                          current * 20 >= Number(directory.data?.total || 0))
-                      }
-                      onClick={() => move(1)}
-                    >
-                      下一题
-                    </Button>
-                  </div>
-                )}
+                <div className="reading-controls">
+                  <Button
+                    loading={moving}
+                    disabled={
+                      moving || index < 0 || (index === 0 && current === 1)
+                    }
+                    onClick={() => move(-1)}
+                  >
+                    上一题
+                  </Button>
+                  <Link
+                    href={`${bankId ? `/banks/${bankId}` : "/questions"}?page=1${context}`}
+                  >
+                    {bankId ? "返回题库" : "返回题目列表"}
+                  </Link>
+                  <Button
+                    loading={moving}
+                    disabled={
+                      moving ||
+                      index < 0 ||
+                      (index >= items.length - 1 &&
+                        current * 20 >= Number(directory.data?.total || 0))
+                    }
+                    onClick={() => move(1)}
+                  >
+                    下一题
+                  </Button>
+                </div>
               </>
             )
           )}
