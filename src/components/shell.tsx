@@ -6,6 +6,7 @@ import { App, Avatar, Button, Dropdown, Space } from "antd";
 import { ReadOutlined, UserOutlined } from "@ant-design/icons";
 import { useAuth } from "./providers";
 import { api, ApiError, errorText } from "@/lib/api";
+import { HeaderSearch } from "./header-search";
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
@@ -61,6 +62,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
+          {path === "/" && <HeaderSearch />}
           <div className="account">
             {loading ? (
               <span className="muted">加载中</span>

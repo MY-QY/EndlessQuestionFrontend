@@ -26,7 +26,7 @@ npm run dev
 
 ## 代码组织
 
-- `src/lib/api.ts`：Axios、响应解包、错误映射、详情访问告警冷却；业务 ID 使用字符串。
+- `src/lib/api.ts`：原生 fetch、响应解包、错误映射、详情访问告警冷却；业务 ID 使用字符串。
 - `src/components/providers.tsx`：Ant Design 中文主题、查询缓存和登录态。
 - `src/components/learning.tsx`：首页、列表、搜索、Markdown 和刷题组件。
 - `src/components/account.tsx`：登录、路由权限、资料、上传和签到。
@@ -48,6 +48,8 @@ npm run build
 npm start
 ```
 
-`npm test` 使用 Node 内置测试运行器验证 Axios 请求契约、字符串 ID、登录失效、游客初始化、告警冷却和文件上传；测试使用适配器模拟响应，不访问或写入真实后端。
+`npm test` 使用 Node 内置测试运行器验证 原生 fetch 请求契约、字符串 ID、登录失效、游客初始化、告警冷却和文件上传；测试模拟原生 fetch 响应，不访问或写入真实后端。
 
 生产环境需配置实际后端地址并提供 HTTPS。未实现没有现成接口支撑的判分、错题本、题目收藏和跨设备学习进度。帖子模块按计划暂缓，需先确认数据表与运行环境。
+
+首页导航提供题目与题库快捷搜索：350 毫秒防抖、分组结果、键盘选择与直接跳转；手机端通过搜索图标展开。

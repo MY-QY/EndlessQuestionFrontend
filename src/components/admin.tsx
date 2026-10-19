@@ -395,10 +395,11 @@ function AdminContent({
                       label="题干"
                       rules={[{ required: true, message: "请输入题干" }]}
                     >
-                      <Editor height={250} />
+                      {/* Drawer owns the page scroll lock; the editor must not copy it to body. */}
+                      <Editor height={250} overflow={false} />
                     </Form.Item>
                     <Form.Item name="answer" label="参考答案">
-                      <Editor height={250} />
+                      <Editor height={250} overflow={false} />
                     </Form.Item>
                   </div>
                 </>
