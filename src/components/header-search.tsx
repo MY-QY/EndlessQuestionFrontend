@@ -43,9 +43,9 @@ export function HeaderSearch() {
     queryKey: ["quick-search", "questions", keyword],
     queryFn: ({ signal }) =>
       api<Page<Question>>(
-        "/question/list/page/vo",
+        "/question/search/page/vo",
         {
-          title: keyword,
+          searchText: keyword,
           current: 1,
           pageSize: 5,
           sortField: "createTime",

@@ -1299,3 +1299,22 @@ button:focus-visible {
     z-index: 10;
   }
 }
+.bank-picker-footer {
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+.bank-link-warning {
+  margin-bottom: 20px;
+}
+.bank-link-warning ul {
+  padding-left: 20px;
+}
+.bank-link-warning p {
+  margin-bottom: 10px;
+}

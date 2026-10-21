@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -20,6 +20,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Bank, errorText, Page, Question, User } from "@/lib/api";
 import { Guard } from "./account";
 import { Failure } from "./learning";
+import { BankPicker, type BankSelection } from "./bank-picker";
+import {
+  applyQuestionBankChanges,
+  loadQuestionBanks,
+  questionBankChanges,
+  type BankTarget,
+  type BankChangeFailure,
+} from "@/lib/question-banks";
 const Editor = dynamic(() => import("@uiw/react-md-editor"), {
   ssr: false,
   loading: () => <p>正在加载编辑器…</p>,
@@ -60,6 +68,16 @@ function AdminContent({
   const [saving, setSaving] = useState(false);
   const [operating, setOperating] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [pendingLinks, setPendingLinks] = useState<{
+    questionId: string;
+    failures: BankChangeFailure[];
+  } | null>(null);
+  const savePending = useRef(false);
+  const bankLoadController = useRef<AbortController | null>(null);
+  const [originalBanks, setOriginalBanks] = useState<BankTarget[] | null>(null);
+  const [loadingBanks, setLoadingBanks] = useState(false);
+  const [bankLoadError, setBankLoadError] = useState("");
+  useEffect(() => () => bankLoadController.current?.abort(), []);
   const [form] = Form.useForm();
   const query = useQuery({
     queryKey: ["private", "admin", kind, bankId, current, keyword],
@@ -85,10 +103,16 @@ function AdminContent({
     setSelected([]);
   }
   function edit(item: Partial<RecordItem>) {
+    bankLoadController.current?.abort();
+    setOriginalBanks(null);
+    setBankLoadError("");
+    setLoadingBanks(false);
+    setPendingLinks(null);
     setEditing(item);
     form.resetFields();
     form.setFieldsValue({
       ...item,
+      questionBanks: [],
       tags:
         item.tagList ||
         (() => {
@@ -99,15 +123,73 @@ function AdminContent({
           }
         })(),
     });
+    if (kind === "questions" && item.id) void fetchMemberships(item.id);
+    else setOriginalBanks([]);
+  }
+  async function fetchMemberships(questionId: string) {
+    bankLoadController.current?.abort();
+    const controller = new AbortController();
+    bankLoadController.current = controller;
+    setLoadingBanks(true);
+    setBankLoadError("");
+    try {
+      const banks = await loadQuestionBanks(questionId, api, controller.signal);
+      if (controller.signal.aborted) return;
+      setOriginalBanks(banks);
+      form.setFieldValue(
+        "questionBanks",
+        banks.map((bank) => ({ value: bank.id, label: bank.title })),
+      );
+    } catch (error) {
+      if (!controller.signal.aborted) setBankLoadError(errorText(error));
+    } finally {
+      if (bankLoadController.current === controller) setLoadingBanks(false);
+    }
+  }
+  const banksUnavailable =
+    kind === "questions" &&
+    (loadingBanks || originalBanks === null || !!bankLoadError);
+  function closeEditor() {
+    if (savePending.current) return;
+    bankLoadController.current?.abort();
+    setEditing(null);
   }
   async function save(values: Record<string, unknown>) {
+    if (savePending.current || pendingLinks || banksUnavailable) return;
+    savePending.current = true;
     setSaving(true);
     try {
-      await api(`/${config.endpoint}/${editing?.id ? "update" : "add"}`, {
-        ...values,
-        ...(editing?.id ? { id: editing.id } : {}),
-      });
-      message.success("保存成功");
+      const { questionBanks, ...payload } = values;
+      const id = await api<string>(
+        `/${config.endpoint}/${editing?.id ? "update" : "add"}`,
+        {
+          ...payload,
+          ...(editing?.id ? { id: editing.id } : {}),
+        },
+      );
+      if (kind === "questions") {
+        const banks = ((questionBanks || []) as BankSelection[]).map(
+          (bank) => ({ id: bank.value, title: bank.label }),
+        );
+        const questionId = editing?.id || id;
+        const failures = await applyQuestionBankChanges(
+          questionId,
+          questionBankChanges(originalBanks || [], banks),
+          api,
+        );
+        if (failures.length) {
+          setPendingLinks({ questionId, failures });
+          await invalidate();
+          return;
+        }
+        message.success(
+          editing?.id
+            ? "题目及所属题库已更新"
+            : banks.length
+              ? "题目已创建，并已添加到所选题库"
+              : "题目已创建",
+        );
+      } else message.success("保存成功");
       setEditing(null);
       await invalidate();
       if (kind === "users")
@@ -115,6 +197,30 @@ function AdminContent({
     } catch (e) {
       message.error(errorText(e));
     } finally {
+      savePending.current = false;
+      setSaving(false);
+    }
+  }
+  async function retryLinks() {
+    if (!pendingLinks || savePending.current) return;
+    savePending.current = true;
+    setSaving(true);
+    try {
+      const failures = await applyQuestionBankChanges(
+        pendingLinks.questionId,
+        pendingLinks.failures,
+        api,
+        true,
+      );
+      if (failures.length) setPendingLinks({ ...pendingLinks, failures });
+      else {
+        message.success("失败的题库关联已补充完成");
+        setPendingLinks(null);
+        setEditing(null);
+      }
+      await invalidate();
+    } finally {
+      savePending.current = false;
       setSaving(false);
     }
   }
@@ -301,12 +407,65 @@ function AdminContent({
       <Drawer
         title={`${editing?.id ? "编辑" : "新建"}${kind === "users" ? "用户" : kind === "banks" ? "题库" : "题目"}`}
         open={editing !== null}
-        onClose={() => !saving && setEditing(null)}
+        onClose={closeEditor}
         width={kind === "questions" ? 860 : 520}
         maskClosable={!saving}
+        closable={!saving}
+        keyboard={!saving}
         destroyOnClose
       >
-        <Form form={form} layout="vertical" onFinish={save} disabled={saving}>
+        {pendingLinks && (
+          <Alert
+            className="bank-link-warning"
+            type="warning"
+            showIcon
+            message={`题目已保存（ID：${pendingLinks.questionId}），部分题库归属调整失败`}
+            description={
+              <>
+                <p>
+                  已成功的调整会保留。下方表单已锁定，重试只处理失败的添加或移除，不会重复保存题目。也可以关闭抽屉，稍后在题库关联管理中处理。
+                </p>
+                <ul>
+                  {pendingLinks.failures.map((bank) => (
+                    <li key={bank.id}>
+                      {bank.action === "add" ? "添加到" : "移出"} {bank.title}：
+                      {bank.message}
+                    </li>
+                  ))}
+                </ul>
+                <Button type="primary" loading={saving} onClick={retryLinks}>
+                  重试失败的关联
+                </Button>
+              </>
+            }
+          />
+        )}
+        {kind === "questions" && editing?.id && loadingBanks && (
+          <Alert
+            className="bank-link-warning"
+            type="info"
+            message="正在加载完整的题库归属，加载完成后可编辑和保存。"
+          />
+        )}
+        {kind === "questions" && editing?.id && bankLoadError && (
+          <Alert
+            className="bank-link-warning"
+            type="error"
+            message="所属题库加载失败，已暂时禁用保存以防误移除关联"
+            description={bankLoadError}
+            action={
+              <Button onClick={() => void fetchMemberships(editing.id!)}>
+                重新加载
+              </Button>
+            }
+          />
+        )}
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={save}
+          disabled={saving || !!pendingLinks || banksUnavailable}
+        >
           {kind === "users" ? (
             <>
               {!editing?.id && (
@@ -367,6 +526,22 @@ function AdminContent({
               >
                 <Input />
               </Form.Item>
+              {kind === "questions" && editing !== null && (
+                <Form.Item
+                  name="questionBanks"
+                  label={editing.id ? "所属题库" : "添加到题库"}
+                  extra={
+                    editing.id
+                      ? "可多选；取消选择会将题目移出对应题库，清空则移出全部题库，题目本身保留。"
+                      : "可选多个题库，留空则仅创建题目。"
+                  }
+                >
+                  <BankPicker
+                    ariaLabel={editing.id ? "所属题库" : "添加到题库"}
+                    disabled={saving || !!pendingLinks || banksUnavailable}
+                  />
+                </Form.Item>
+              )}
               {kind === "banks" ? (
                 <>
                   <Form.Item name="description" label="介绍">
@@ -396,19 +571,41 @@ function AdminContent({
                       rules={[{ required: true, message: "请输入题干" }]}
                     >
                       {/* Drawer owns the page scroll lock; the editor must not copy it to body. */}
-                      <Editor height={250} overflow={false} />
+                      <Editor
+                        height={250}
+                        overflow={false}
+                        hideToolbar={
+                          saving || !!pendingLinks || banksUnavailable
+                        }
+                        textareaProps={{
+                          disabled:
+                            saving || !!pendingLinks || banksUnavailable,
+                        }}
+                      />
                     </Form.Item>
                     <Form.Item name="answer" label="参考答案">
-                      <Editor height={250} overflow={false} />
+                      <Editor
+                        height={250}
+                        overflow={false}
+                        hideToolbar={
+                          saving || !!pendingLinks || banksUnavailable
+                        }
+                        textareaProps={{
+                          disabled:
+                            saving || !!pendingLinks || banksUnavailable,
+                        }}
+                      />
                     </Form.Item>
                   </div>
                 </>
               )}
             </>
           )}
-          <Button type="primary" htmlType="submit" loading={saving}>
-            保存
-          </Button>
+          {!pendingLinks && (
+            <Button type="primary" htmlType="submit" loading={saving}>
+              保存
+            </Button>
+          )}
         </Form>
       </Drawer>
       {bankId && (

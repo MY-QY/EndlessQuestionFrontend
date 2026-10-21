@@ -169,7 +169,7 @@ export function HomePage() {
     queryKey: ["home-questions"],
     queryFn: ({ signal }) =>
       api<Page<Question>>(
-        "/question/list/page/vo",
+        "/question/search/page/vo",
         {
           current: 1,
           pageSize: 5,
@@ -322,7 +322,6 @@ export function Catalog({
   const current = Math.max(1, Number(search.get("page")) || 1);
   const keyword = search.get("q") || "";
   const tag = search.get("tag") || "";
-  const fulltext = search.get("mode") === "fulltext";
   const [input, setInput] = useState(keyword);
   const [tagInput, setTagInput] = useState(tag);
   useEffect(() => {
@@ -333,6 +332,7 @@ export function Catalog({
     if (input.trim() === keyword) return;
     const timer = setTimeout(() => {
       const params = new URLSearchParams(search.toString());
+      params.delete("mode");
       if (input.trim()) params.set("q", input.trim());
       else params.delete("q");
       params.set("page", "1");
@@ -342,6 +342,7 @@ export function Catalog({
   }, [input, keyword, search, path, router]);
   function update(values: Record<string, string>) {
     const params = new URLSearchParams(search.toString());
+    params.delete("mode");
     Object.entries(values).forEach(([key, value]) =>
       value ? params.set(key, value) : params.delete(key),
     );
@@ -354,18 +355,16 @@ export function Catalog({
     enabled: !!bankId,
   });
   const query = useQuery({
-    queryKey: ["catalog", kind, bankId, current, keyword, tag, fulltext],
+    queryKey: ["catalog", kind, bankId, current, keyword, tag],
     queryFn: ({ signal }) =>
       api<Page<Question & Bank> | null>(
         kind === "banks"
           ? "/questionBank/list/page/vo"
-          : fulltext
-            ? "/question/search/page/vo"
-            : "/question/list/page/vo",
+          : "/question/search/page/vo",
         {
           current,
           pageSize: 12,
-          ...(fulltext ? { searchText: keyword } : { title: keyword }),
+          ...(kind === "banks" ? { title: keyword } : { searchText: keyword }),
           ...(tag ? { tags: [tag] } : {}),
           questionBankId: bankId,
           sortField: "createTime",
@@ -401,7 +400,7 @@ export function Catalog({
         </p>
         {bankId && query.data?.records[0] && (
           <Link
-            href={`/banks/${bankId}/questions/${query.data.records[0].id}?page=${Math.floor(((current - 1) * 12) / 20) + 1}&q=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}&mode=${fulltext ? "fulltext" : ""}`}
+            href={`/banks/${bankId}/questions/${query.data.records[0].id}?page=${Math.floor(((current - 1) * 12) / 20) + 1}&q=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}`}
           >
             <Button type="primary">
               开始刷题 <ArrowRightOutlined />
@@ -432,14 +431,6 @@ export function Catalog({
                     update({ tag: tagInput.trim(), page: "1" })
                   }
                 />
-                <Button
-                  type={fulltext ? "primary" : "default"}
-                  onClick={() =>
-                    update({ mode: fulltext ? "" : "fulltext", page: "1" })
-                  }
-                >
-                  {fulltext ? "全文搜索" : "普通查询"}
-                </Button>
               </>
             )}
           </div>
@@ -448,11 +439,6 @@ export function Catalog({
           ) : query.error ? (
             <Space direction="vertical" style={{ width: "100%" }}>
               <Failure error={query.error} retry={() => void query.refetch()} />
-              {fulltext && (
-                <Button onClick={() => update({ mode: "", page: "1" })}>
-                  切换普通查询
-                </Button>
-              )}
             </Space>
           ) : query.data === null ? (
             <Alert
@@ -473,7 +459,7 @@ export function Catalog({
                     items={query.data.records}
                     bankId={bankId}
                     offset={(current - 1) * 12}
-                    context={`&q=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}&mode=${fulltext ? "fulltext" : ""}`}
+                    context={`&q=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}`}
                   />
                 </div>
               )}
@@ -507,8 +493,7 @@ export function QuestionDetail({
   const [show, setShow] = useState(false);
   const keyword = search.get("q") || "";
   const tag = search.get("tag") || "";
-  const fulltext = search.get("mode") === "fulltext";
-  const context = `&q=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}&mode=${fulltext ? "fulltext" : ""}`;
+  const context = `&q=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}`;
   const query = useQuery({
     queryKey: ["question", id, user?.id],
     queryFn: ({ signal }) =>
@@ -519,17 +504,17 @@ export function QuestionDetail({
     enabled: !loading,
   });
   const directory = useQuery({
-    queryKey: ["directory", bankId, current, keyword, tag, fulltext],
+    queryKey: ["directory", bankId, current, keyword, tag],
     queryFn: ({ signal }) =>
       api<Page<Question>>(
-        fulltext ? "/question/search/page/vo" : "/question/list/page/vo",
+        "/question/search/page/vo",
         {
           questionBankId: bankId,
           current,
           pageSize: 20,
           sortField: "createTime",
           sortOrder: "descend",
-          ...(fulltext ? { searchText: keyword } : { title: keyword }),
+          searchText: keyword,
           ...(tag ? { tags: [tag] } : {}),
         },
         "post",
@@ -568,18 +553,15 @@ export function QuestionDetail({
       let target = items[index + delta];
       if (!target && index >= 0) {
         page += delta;
-        const next = await api<Page<Question>>(
-          fulltext ? "/question/search/page/vo" : "/question/list/page/vo",
-          {
-            questionBankId: bankId,
-            current: page,
-            pageSize: 20,
-            sortField: "createTime",
-            sortOrder: "descend",
-            ...(fulltext ? { searchText: keyword } : { title: keyword }),
-            ...(tag ? { tags: [tag] } : {}),
-          },
-        );
+        const next = await api<Page<Question>>("/question/search/page/vo", {
+          questionBankId: bankId,
+          current: page,
+          pageSize: 20,
+          sortField: "createTime",
+          sortOrder: "descend",
+          searchText: keyword,
+          ...(tag ? { tags: [tag] } : {}),
+        });
         target =
           delta > 0 ? next.records[0] : next.records[next.records.length - 1];
       }
